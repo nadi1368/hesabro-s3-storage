@@ -1,0 +1,29 @@
+{
+    "name": "mamadali/s3-storage",
+    "description": "A package for yii2 to store files on s3 storage",
+    "keywords": [
+        "aws",
+        "s3",
+        "storage",
+        "yii2"
+    ],
+    "homepage": "",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "MamadAli",
+            "email": "mhmd.ali.shabani@gmail.com",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8.0",
+        "yiisoft/yii2": "^2.0.*",
+        "aws/aws-sdk-php": "3.316.2"
+    },
+    "autoload": {
+        "psr-4": {
+            "mamadali\\S3Storage\\": "src/"
+        }
+    }
+}
