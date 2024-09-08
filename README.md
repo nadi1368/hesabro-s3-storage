@@ -1,6 +1,7 @@
 Yii2 S3 Storage
 =====================
 Yii2 S3 Storage is a Yii2 component that provides an easy way to store files on Amazon S3.
+
 [![Latest Stable Version](https://img.shields.io/packagist/v/mamadali/yii2-s3-storage.svg)](https://packagist.org/packages/mamadali/yii2-s3-storage)
 [![Total Downloads](https://img.shields.io/packagist/dt/mamadali/yii2-s3-storage.svg)](https://packagist.org/packages/mamadali/yii2-s3-storage)
 
@@ -13,7 +14,7 @@ The preferred way to install this extension is through [composer](http://getcomp
 Either run
 
 ```
-composer require --prefer-dist mamadali/yii2-s3-storage "*"
+composer require mamadali/yii2-s3-storage
 ```
 
 or add
