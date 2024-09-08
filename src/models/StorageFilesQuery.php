@@ -65,13 +65,13 @@ class StorageFilesQuery extends \yii\db\ActiveQuery
 		return $this->andWhere([StorageFiles::tableName().'.id' => $id]);
 	}
 
-    public function byModelType($modelType): StorageFilesQuery
+    public function byModelClass($modelClass): StorageFilesQuery
     {
-        return $this->andWhere([StorageFiles::tableName().'.model_type' => $modelType]);
+        return $this->andWhere([StorageFiles::tableName().'.model_class' => $modelClass]);
     }
 
-    public function byModel($modelType, $modelId = null, $attribute = null): StorageFilesQuery
+    public function byModel($modelClass, $modelId = null, $attribute = null): StorageFilesQuery
     {
-        return $this->andWhere([StorageFiles::tableName().'.model_type' => $modelType, StorageFiles::tableName().'.model_id' => $modelId, StorageFiles::tableName().'.attribute' => $attribute]);
+        return $this->andWhere([StorageFiles::tableName().'.model_class' => $modelClass, StorageFiles::tableName().'.model_id' => $modelId, StorageFiles::tableName().'.attribute' => $attribute]);
     }
 }

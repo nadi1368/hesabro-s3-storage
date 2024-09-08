@@ -2,11 +2,11 @@
 
 namespace mamadali\S3Storage\behaviors;
 
+use mamadali\S3Storage\components\S3Storage;
 use mamadali\S3Storage\models\StorageFiles;
-use mamadali\S3Storage\models\StorageFileShared;
-use mamadali\S3Storage\models\StorageFilesQuery;
 use Closure;
 use WebPConvert\WebPConvert;
+use Yii;
 use yii\base\Behavior;
 use yii\base\ErrorException;
 use yii\base\InvalidConfigException;
@@ -14,6 +14,7 @@ use yii\base\Model;
 use yii\db\ActiveQuery;
 use yii\db\ActiveRecord;
 use yii\db\BaseActiveRecord;
+use yii\helpers\ArrayHelper;
 use yii\web\UploadedFile;
 
 /**
@@ -28,9 +29,9 @@ use yii\web\UploadedFile;
  *     return [
  *          [
  *              'class' => StorageUploadBehavior::class,
- *              'modelType' => StorageFiles::MODEL_TYPE_CLIENT_SETTINGS,
  *              'attributes' => ['photo'],
  *              'scenarios' => [self::SCENARIO_CHANGE_VALUE],
+ *              'path' => 'path/model_class/{id}'
  *          ],
  *     ];
  * }
@@ -59,17 +60,12 @@ class StorageUploadBehavior extends Behavior
      */
     public ?Closure $fileName = null;
 
-    /**
-     * @var int one of model types const in StorageFiles Model
-     */
-    public int $modelType;
-
     public string $primaryKey = 'id';
 
     /**
      * @var int one of access const in StorageFiles Model
      */
-    public int $accessFile = StorageFiles::ACCESS_PUBLIC_READ;
+    public int $accessFile = S3Storage::ACCESS_PUBLIC_READ;
 
     /**
      * @var bool delete previous uploaded file on attribute with single file (this not work for multiple file in attribute)
@@ -78,6 +74,8 @@ class StorageUploadBehavior extends Behavior
 
     public bool $convertImageToWebp = false;
     public array $memeTypeForConvertToWebp = ['image/png', 'image/jpg', 'image/jpeg'];
+
+    public string $path;
 
     /**
      * @var array|Closure list of client who can see file OR ['*'] for see in all clients
@@ -96,6 +94,8 @@ class StorageUploadBehavior extends Behavior
      */
     protected array $_deletedStorageFiles = [];
 
+    protected S3Storage $s3Storage;
+
     /**
      * @throws InvalidConfigException
      */
@@ -103,11 +103,13 @@ class StorageUploadBehavior extends Behavior
     {
         parent::init();
 
-        if (empty($this->modelType) || !array_key_exists($this->modelType, StorageFiles::itemAlias('ModelType'))) {
-            throw new InvalidConfigException('The "modelType" property must be set.');
+        if(Yii::$app->has('s3storage')) {
+            $this->s3Storage = Yii::$app->get('s3storage');
+        } else {
+            throw new InvalidConfigException('You must configure "s3storage" component first.');
         }
 
-        if (!array_key_exists($this->accessFile, StorageFiles::itemAlias('S3Acl'))) {
+        if (!array_key_exists($this->accessFile, S3Storage::itemAlias('S3Acl'))) {
             throw new InvalidConfigException('The "accessFile" property must be set.');
         }
 
@@ -267,8 +269,8 @@ class StorageUploadBehavior extends Behavior
 
     protected function processDeletedStorageFiles(string $attribute, string $primaryKey): void
     {
-        $oldStorageFiles = StorageFiles::find()
-            ->byModel($this->modelType, $this->owner->$primaryKey, $attribute)
+        $oldStorageFiles = $this->s3Storage->storageFilesModelClass::find()
+            ->byModel($this->owner::class, $this->owner->$primaryKey, $attribute)
             ->all();
 
         $this->_deletedStorageFiles = array_merge($this->_deletedStorageFiles, $oldStorageFiles);
@@ -276,9 +278,13 @@ class StorageUploadBehavior extends Behavior
 
     protected function processStorageFile(UploadedFile $file, string $attribute, string $primaryKey, bool $arrayFile = false): void
     {
-        $storageFile = StorageFiles::saveNewFile(
+        /**
+         * @var StorageFiles $storageFile
+         */
+        $storageFile = $this->s3Storage->storageFilesModelClass::saveNewFile(
             file: $file, 
-            modelType: $this->modelType, 
+            modelClass: $this->owner::class,
+            filePath: $this->getFilePath(),
             modelId: $this->owner->$primaryKey, 
             attribute: $attribute, 
             access: $this->accessFile, 
@@ -287,11 +293,28 @@ class StorageUploadBehavior extends Behavior
         if ($storageFile) {
             $this->_storageFiles[] = $storageFile;
             if(!$arrayFile){
-                $this->owner->$attribute = $storageFile->id;
+                $this->owner->$attribute = $storageFile->file_name;
             } else {
                 $this->owner->$attribute = null;
             }
         }
+    }
+
+    protected function getFilePath(): string
+    {
+        $model = $this->owner;
+        if(($path = $this->path) instanceof Closure){
+            return $path($model);
+        }
+        return preg_replace_callback('/{([^}]+)}/', function ($matches) use ($model) {
+            $name = $matches[1];
+            $attribute = ArrayHelper::getValue($model, $name);
+            if (is_string($attribute) || is_numeric($attribute)) {
+                return $attribute;
+            } else {
+                return $matches[0];
+            }
+        }, $this->path);
     }
 
     /**
@@ -307,7 +330,7 @@ class StorageUploadBehavior extends Behavior
     /**
      * @throws ErrorException
      */
-    protected function uploadStorageFile(StorageFiles $storageFile): void
+    protected function uploadStorageFile($storageFile): void
     {
         if (!$storageFile->uploadFile()) {
             throw new ErrorException('خطا در آپلود فایل');
@@ -333,7 +356,13 @@ class StorageUploadBehavior extends Behavior
     public function getFileUrl(string $attribute = null): ?string
     {
         $storageFile = $this->getStorageFile($attribute)->one();
-        return $storageFile?->getFileUrl();
+        if($storageFile){
+            return $storageFile->getFileUrl();
+        }
+        if(is_string($this->owner->$attribute)){
+            return S3Storage::getPublicUrl($this->getFilePath() . '/' . $this->owner->$attribute);
+        }
+        return null;
     }
 
     /**
@@ -365,23 +394,22 @@ class StorageUploadBehavior extends Behavior
         return $sharedWith instanceof Closure ? $sharedWith($this->owner) : $sharedWith;
     }
 
-    public function getStorageFile(string $attribute = null): StorageFilesQuery|ActiveQuery
+    public function getStorageFile(string $attribute = null): ActiveQuery
     {
-        $modelClass = $this->getSharedWithClients() ? StorageFileShared::class : StorageFiles::class;
+        $modelClass = $this->s3Storage->storageFilesModelClass;
         $primaryKey = $this->primaryKey;
         return $this->owner->hasOne($modelClass, ['model_id' => $primaryKey])
-            ->andOnCondition(['model_type' => $this->modelType, 'attribute' => $attribute ?: $this->attributes[array_key_first($this->attributes)]]);
+            ->andOnCondition(['model_class' => $this->owner::class, 'attribute' => $attribute ?: $this->attributes[array_key_first($this->attributes)]]);
     }
 
     /**
      * @param string|null $attribute
-     * @return ActiveQuery|StorageFilesQuery
      */
-    public function getStorageFiles(string $attribute = null): ActiveQuery|StorageFilesQuery
+    public function getStorageFiles(string $attribute = null): ActiveQuery
     {
-        $modelClass = $this->getSharedWithClients() ? StorageFileShared::class : StorageFiles::class;
+        $modelClass = $this->s3Storage->storageFilesModelClass;
         $primaryKey = $this->primaryKey;
         return $this->owner->hasMany($modelClass, ['model_id' => $primaryKey])
-            ->andOnCondition(['model_type' => $this->modelType, 'attribute' => $attribute ?: $this->attributes[array_key_first($this->attributes)]]);
+            ->andOnCondition(['model_class' => $this->owner::class, 'attribute' => $attribute ?: $this->attributes[array_key_first($this->attributes)]]);
     }
 }

@@ -2,10 +2,10 @@
 
 namespace mamadali\S3Storage\models;
 
-use common\behaviors\JsonAdditional;
 use common\behaviors\StatusActiveBehavior;
 use common\components\Env;
 use common\models\User;
+use mamadali\S3Storage\components\S3Storage;
 use Yii;
 use yii\base\Exception;
 use yii\behaviors\BlameableBehavior;
@@ -17,10 +17,10 @@ use yii\web\UploadedFile;
  * This is the model class for table "storage_files".
  *
  * @property int $id
- * @property int|null $access
- * @property int|null $model_type
- * @property int|null $model_id
- * @property string|null $attribute
+ * @property int $access
+ * @property string $model_class
+ * @property int $model_id
+ * @property string $attribute
  * @property string|null $file_path
  * @property string|null $file_name
  * @property int|null $size
@@ -32,7 +32,6 @@ use yii\web\UploadedFile;
  * @property int|null $updated_by
  * @property array $additional_data
  * @property array $shared_with
- * @property int $slave_id
  *
  * @property-read User $update
  * @property-read User $creator
@@ -45,35 +44,10 @@ class StorageFiles extends \yii\db\ActiveRecord
 
 	const SCENARIO_CREATE = 'create';
 
-    const ACCESS_PRIVATE = 1;
-    const ACCESS_PUBLIC_READ = 2;
-
-    const MODEL_TYPE_CLIENT_SETTINGS = 1;
-    const MODEL_TYPE_CATEGORY = 2;
-    const MODEL_TYPE_PRODUCT_MAIN = 3;
-    const MODEL_TYPE_DOCUMENT = 4;
-    const MODEL_TYPE_UPLOAD_EXCEL = 5;
-    const MODEL_TYPE_INDICATOR = 6;
-    const MODEL_TYPE_EDUCATION_COURSE = 7;
-    const MODEL_TYPE_CHANGE_LOGS = 8;
-    const MODEL_TYPE_PRODUCT_EXPORT = 9;
-    const MODEL_TYPE_TICKETS = 10;
-    const MODEL_TYPE_LANDING_IMAGE = 11;
-    const MODEL_TYPE_USER = 12;
-    const MODEL_TYPE_EMPLOYEE_BRANCH_USER = 13;
-    const MODEL_TYPE_AUTOMATION_LETTER = 14;
-    const MODEL_TYPE_AUTOMATION_SIGNATURE = 15;
-    const MODEL_TYPE_AUTOMATION_PRINT = 16;
-
-    const MODEL_TYPE_FAQ = 17;
-
     /**
      * @var UploadedFile|null
      */
     public ?UploadedFile $file = null;
-
-    /** Additional Data Properties */
-    public $old_link;
 
     /**
      * {@inheritdoc}
@@ -83,8 +57,8 @@ class StorageFiles extends \yii\db\ActiveRecord
         return '{{%storage_files}}';
     }
 
-	public function behaviors()
-	{
+	public function behaviors(): array
+    {
 		return [
 			[
 				'class' => TimestampBehavior::class,
@@ -92,17 +66,6 @@ class StorageFiles extends \yii\db\ActiveRecord
 			[
 				'class' => BlameableBehavior::class,
 			],
-            [
-                'class' => StatusActiveBehavior::class,
-            ],
-            [
-                'class' => JsonAdditional::class,
-                'ownerClassName' => self::class,
-                'fieldAdditional' => 'additional_data',
-                'AdditionalDataProperty' => [
-                    'old_link' => 'String',
-                ],
-            ],
 		];
 	}
 
@@ -112,10 +75,9 @@ class StorageFiles extends \yii\db\ActiveRecord
     public function rules()
     {
         return [
-            [['access', 'model_type', 'model_id', 'size'], 'integer'],
-            [['additional_data'], 'safe'],
+            [['access', 'model_id', 'size'], 'integer'],
+            [['model_class'], 'string'],
             [['file_path', 'file_name', 'meme_type', 'attribute'], 'string', 'max' => 255],
-            ['model_type', 'in', 'range' => array_keys(self::itemAlias('ModelType'))],
         ];
     }
 
@@ -127,7 +89,7 @@ class StorageFiles extends \yii\db\ActiveRecord
         return [
             'id' => Yii::t('app', 'ID'),
             'access' => Yii::t('app', 'Access'),
-            'model_type' => Yii::t('app', 'Model Type'),
+            'model_class' => Yii::t('app', 'Model Class'),
             'model_id' => Yii::t('app', 'Model ID'),
             'file_path' => Yii::t('app', 'File Path'),
             'file_name' => Yii::t('app', 'File Name'),
@@ -137,7 +99,6 @@ class StorageFiles extends \yii\db\ActiveRecord
             'created_by' => Yii::t('app', 'Created By'),
             'updated_by' => Yii::t('app', 'Updated By'),
             'additional_data' => Yii::t('app', 'Additional Data'),
-            'slave_id' => Yii::t('app', 'Slave ID'),
             'attribute' => Yii::t('app', 'Attribute'),
         ];
     }
@@ -146,7 +107,7 @@ class StorageFiles extends \yii\db\ActiveRecord
     {
         $scenarios = parent::scenarios();
 
-        $scenarios[self::SCENARIO_CREATE] = ['access', 'model_type', 'model_id', 'file_path', 'file_name'];
+        $scenarios[self::SCENARIO_CREATE] = ['access', 'model_class', 'model_id', 'file_path', 'file_name'];
 
         return $scenarios;
     }
@@ -174,21 +135,24 @@ class StorageFiles extends \yii\db\ActiveRecord
 
     public function getS3Acl()
     {
-        return self::itemAlias('S3Acl', $this->access);
+        return S3Storage::itemAlias('S3Acl', $this->access);
     }
 
+    /**
+     * @throws Exception
+     */
     public function getFileUrl(): string
     {
         return match ($this->access) {
-            self::ACCESS_PRIVATE => $this->getPrivateUrlFile(),
-            self::ACCESS_PUBLIC_READ => Env::get('AWS_BUCKET_DOMAIN') ? str_replace(Yii::$app->s3->getEndpoint() . '/' . Yii::$app->s3->getDefaultBucket(), Env::get('AWS_BUCKET_DOMAIN'), Yii::$app->s3->getPublicObjectUrl($this->fullFilePath)) : Yii::$app->s3->getPublicObjectUrl($this->fullFilePath),
+            S3Storage::ACCESS_PRIVATE => $this->getPrivateUrlFile(),
+            S3Storage::ACCESS_PUBLIC_READ => S3Storage::getPublicUrl($this->fullFilePath),
             default => ''
         };
     }
 
     public function getFileContent()
     {
-        return Yii::$app->s3->loadObject($this->fullFilePath);
+        return Yii::$app->s3storage->loadObject($this->fullFilePath);
     }
 
     /**
@@ -196,8 +160,7 @@ class StorageFiles extends \yii\db\ActiveRecord
      */
     protected function getPrivateUrlFile(): string
     {
-        $token = MgStorageFileTokens::createNewToken($this);
-        return Url::to(['/storage/file', 'token' => $token], true);
+        return Yii::$app->s3storage->getPrivateObjectUrl($this->fullFilePath);
     }
 
     public function setFile(UploadedFile $file): void
@@ -207,20 +170,17 @@ class StorageFiles extends \yii\db\ActiveRecord
         $this->meme_type = $file->type;
     }
 
-    public static function saveNewFile(UploadedFile $file, int $modelType, string $filePath = '', ?int $modelId = null, ?string $attribute = null, int $access = self::ACCESS_PUBLIC_READ, array $sharedWith = []): bool|StorageFiles
+    public static function saveNewFile(UploadedFile $file, string $modelClass, string $filePath, ?int $modelId = null, ?string $attribute = null, int $access = self::ACCESS_PUBLIC_READ, array $sharedWith = []): bool|StorageFiles
     {
         $storageFile = new StorageFiles();
-        $storageFile->file_path = Yii::$app->client->id . '/' . StorageFiles::itemAlias('ModelType', $modelType) . ($filePath ? $filePath . '/' : '/');
+        $storageFile->file_path = ($filePath ? $filePath . '/' : '/');
         $storageFile->setFile($file);
-        $storageFile->model_type = $modelType;
+        $storageFile->model_class = $modelClass;
         $storageFile->model_id = $modelId;
         $storageFile->attribute = $attribute;
         $storageFile->access = $access;
         $storageFile->shared_with = $sharedWith;
         $storageFile->file = $file;
-        if (is_string($storageFile->file->tempName) && filter_var($storageFile->file->tempName, FILTER_VALIDATE_URL)) {
-            $storageFile->old_link = $storageFile->file->tempName;
-        }
         $flag = $storageFile->save();
         return $flag ? $storageFile : false;
     }
@@ -243,7 +203,7 @@ class StorageFiles extends \yii\db\ActiveRecord
 
     public function uploadFile(): bool
     {
-        $s3 = Yii::$app->s3;
+        $s3 = Yii::$app->s3storage;
         if($this->file instanceof UploadedFile) {
             return $s3->uploadObject($this->fullFilePath, $this->file->tempName, acl: $this->getS3Acl(), contentType: $this->meme_type);
         }
@@ -296,7 +256,7 @@ class StorageFiles extends \yii\db\ActiveRecord
 
     public function deleteFile(): bool
     {
-        $s3 = Yii::$app->s3;
+        $s3 = Yii::$app->s3storage;
         return $s3->deleteObject($this->fullFilePath);
     }
 
@@ -330,42 +290,6 @@ class StorageFiles extends \yii\db\ActiveRecord
                 self::STATUS_ACTIVE => Yii::t("app", "Status Active"),
                 self::STATUS_DELETED => Yii::t("app", "Status Delete"),
             ],
-            'ModelType' => [ // model type folder name
-                self::MODEL_TYPE_CLIENT_SETTINGS => 'client-settings',
-                self::MODEL_TYPE_CATEGORY => 'category',
-                self::MODEL_TYPE_PRODUCT_MAIN => 'product',
-                self::MODEL_TYPE_INDICATOR => 'indicator',
-                self::MODEL_TYPE_DOCUMENT => 'document',
-                self::MODEL_TYPE_UPLOAD_EXCEL => 'upload-excel',
-                self::MODEL_TYPE_EDUCATION_COURSE => 'education-course',
-                self::MODEL_TYPE_CHANGE_LOGS => 'change-logs',
-                self::MODEL_TYPE_PRODUCT_EXPORT => 'product-export',
-                self::MODEL_TYPE_TICKETS => 'tickets',
-                self::MODEL_TYPE_LANDING_IMAGE => 'landing-images',
-                self::MODEL_TYPE_USER => 'user',
-                self::MODEL_TYPE_EMPLOYEE_BRANCH_USER => 'employee_branch_user',
-                self::MODEL_TYPE_AUTOMATION_LETTER => 'automation_letter',
-                self::MODEL_TYPE_AUTOMATION_SIGNATURE => 'automation_signature',
-                self::MODEL_TYPE_AUTOMATION_PRINT => 'automation_print',
-                self::MODEL_TYPE_FAQ => 'faq',
-            ],
-            'ModelTypeTitle' => [
-                self::MODEL_TYPE_CLIENT_SETTINGS => 'تنظیمات',
-                self::MODEL_TYPE_CATEGORY => 'دسته بندی محصولات',
-                self::MODEL_TYPE_PRODUCT_MAIN => 'محصولات اصلی',
-                self::MODEL_TYPE_INDICATOR => 'اندیکاتور',
-                self::MODEL_TYPE_DOCUMENT => 'اسناد',
-                self::MODEL_TYPE_UPLOAD_EXCEL => 'آپلود اکسل',
-                self::MODEL_TYPE_EDUCATION_COURSE => 'ویدیو های آموزشی',
-                self::MODEL_TYPE_CHANGE_LOGS => 'تغییرات اخیر',
-                self::MODEL_TYPE_PRODUCT_EXPORT => 'خروجی محصولات',
-                self::MODEL_TYPE_TICKETS => 'تیکت ها',
-                self::MODEL_TYPE_LANDING_IMAGE => 'بنر و اسلایدشو',
-            ],
-            'S3Acl' => [
-                self::ACCESS_PRIVATE => 'private',
-                self::ACCESS_PUBLIC_READ => 'public-read',
-            ],
             default => false
         };
 
@@ -377,12 +301,11 @@ class StorageFiles extends \yii\db\ActiveRecord
         }
 	}
 
-    public function beforeSave($insert): bool
+    public function beforeSave($insert)
     {
-        $this->shared_with = array_map(function ($client) {
-            return (string)$client;
-        }, $this->shared_with ?: []);
-
+        if($this->isNewRecord){
+            $this->status = self::STATUS_ACTIVE;
+        }
         return parent::beforeSave($insert);
     }
 }
