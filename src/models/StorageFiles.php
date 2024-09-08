@@ -230,16 +230,6 @@ class StorageFiles extends \yii\db\ActiveRecord
         return true;
     }
 
-    public static function formatStorageSpace($bytes) {
-        $sizes = array('B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB');
-
-        if ($bytes == 0) {
-            return '0 B';
-        }
-
-        $i = floor(log($bytes, 1024));
-        return round($bytes / pow(1024, $i), 3) . ' ' . $sizes[$i];
-    }
     /*
     * حذف منطقی
     */

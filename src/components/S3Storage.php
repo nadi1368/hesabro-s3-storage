@@ -5,7 +5,6 @@ namespace mamadali\S3Storage\components;
 use Aws\Exception\AwsException;
 use Aws\S3\Exception\S3Exception;
 use Aws\S3\S3Client;
-use mamadali\S3Storage\StorageModule;
 use Yii;
 use yii\base\InvalidConfigException;
 
@@ -250,6 +249,36 @@ class S3Storage extends \yii\base\Component
             $url = str_replace(Yii::$app->s3storage->getEndpoint() . '/' . Yii::$app->s3storage->getDefaultBucket(), Yii::$app->s3storage->bucket_domain, $url);
         }
         return $url;
+    }
+
+    public function getTotalUsage()
+    {
+        $modelClass = $this->storageFilesModelClass;
+        return $modelClass::find()->sum('size');
+    }
+
+    public function getUsageByModelClass($model_class)
+    {
+        $modelClass = $this->storageFilesModelClass;
+        return $modelClass::find()->andWhere(['model_class' => $model_class])->sum('size');
+    }
+
+    public function getUsageSeperatedByModelClass()
+    {
+        $modelClass = $this->storageFilesModelClass;
+        return $modelClass::find()->select(['model_class', 'SUM(size) as size'])->groupBy('model_class')->asArray()->all();
+    }
+
+    public static function formatUsageSpace($bytes): string
+    {
+        $sizes = array('B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB');
+
+        if ($bytes == 0) {
+            return '0 B';
+        }
+
+        $i = floor(log($bytes, 1024));
+        return round($bytes / pow(1024, $i), 3) . ' ' . $sizes[$i];
     }
 
     public static function itemAlias($type, $code = null)

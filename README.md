@@ -73,3 +73,25 @@ then just add file input to your form and save model in controller
 ```php
     $model->save();
 ```
+
+get usage of storage
+```php
+S3Storage::formatUsageSpace(Yii::$app->s3storage->getTotalUsage());
+// return "1 MB"
+```
+
+```php
+S3Storage::formatUsageSpace(Yii::$app->s3storage->getUsageByModelClass(Model::class));
+```
+
+```php
+Yii::$app->s3storage->getUsageSeperatedByModelClass();
+/**
+* return [
+ *     [
+ *          'model_class' => 'common\models\Model',
+ *          'size' => 1048576 // bytes
+ *     ],
+ * ]
+ */
+```
