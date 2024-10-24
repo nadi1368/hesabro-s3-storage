@@ -160,7 +160,11 @@ class StorageFiles extends \yii\db\ActiveRecord
      */
     protected function getPrivateUrlFile(): string
     {
-        return Yii::$app->s3storage->getPrivateObjectUrl($this->fullFilePath);
+        $url = Yii::$app->s3storage->getPrivateObjectUrl($this->fullFilePath);
+        if(Yii::$app->s3storage->bucket_domain){
+            $url = str_replace(Yii::$app->s3storage->endpoint . '/' . Yii::$app->s3storage->getDefaultBucket(), Yii::$app->s3storage->bucket_domain, $url);
+        }
+        return $url;
     }
 
     public function setFile(UploadedFile $file): void
@@ -170,7 +174,7 @@ class StorageFiles extends \yii\db\ActiveRecord
         $this->meme_type = $file->type;
     }
 
-    public static function saveNewFile(UploadedFile $file, string $modelClass, string $filePath, ?int $modelId = null, ?string $attribute = null, int $access = self::ACCESS_PUBLIC_READ, array $sharedWith = []): bool|StorageFiles
+    public static function saveNewFile(UploadedFile $file, string $modelClass, string $filePath, ?int $modelId = null, ?string $attribute = null, int $access = S3Storage::ACCESS_PUBLIC_READ, array $sharedWith = []): bool|StorageFiles
     {
         $storageFile = new StorageFiles();
         $storageFile->file_path = ($filePath ? $filePath . '/' : '/');
