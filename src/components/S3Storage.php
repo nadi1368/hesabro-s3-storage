@@ -63,7 +63,7 @@ class S3Storage extends \yii\base\Component
                 'key' => $this->key,
                 'secret' => $this->secret
             ],
-            'use_path_style_endpoint' => true,
+            'use_path_style_endpoint' => false,
         ]);
     }
 
@@ -246,7 +246,7 @@ class S3Storage extends \yii\base\Component
     {
         $url = Yii::$app->s3storage->getPublicObjectUrl($fullFilePath);
         if(Yii::$app->s3storage->bucket_domain){
-            $url = str_replace(Yii::$app->s3storage->endpoint . '/' . Yii::$app->s3storage->getDefaultBucket(), Yii::$app->s3storage->bucket_domain, $url);
+            $url = str_replace(Yii::$app->s3storage->getDefaultBucket() . '.' . Yii::$app->s3storage->endpoint, Yii::$app->s3storage->bucket_domain, $url);
         }
         return $url;
     }

@@ -162,7 +162,7 @@ class StorageFiles extends \yii\db\ActiveRecord
     {
         $url = Yii::$app->s3storage->getPrivateObjectUrl($this->fullFilePath);
         if(Yii::$app->s3storage->bucket_domain){
-            $url = str_replace(Yii::$app->s3storage->endpoint . '/' . Yii::$app->s3storage->getDefaultBucket(), Yii::$app->s3storage->bucket_domain, $url);
+            $url = str_replace(Yii::$app->s3storage->getDefaultBucket() . '.' . Yii::$app->s3storage->endpoint, Yii::$app->s3storage->bucket_domain, $url);
         }
         return $url;
     }
