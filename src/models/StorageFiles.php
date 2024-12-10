@@ -300,6 +300,13 @@ class StorageFiles extends \yii\db\ActiveRecord
         if($this->isNewRecord){
             $this->status = self::STATUS_ACTIVE;
         }
+        if($this->shared_with){
+            $shared_with = [];
+            foreach($this->shared_with as $key => $value){
+                $shared_with[$key] = (string)$value;
+            }
+            $this->shared_with = $shared_with;
+        }
         return parent::beforeSave($insert);
     }
 }

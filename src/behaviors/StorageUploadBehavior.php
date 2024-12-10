@@ -96,6 +96,8 @@ class StorageUploadBehavior extends Behavior
 
     protected S3Storage $s3Storage;
 
+    public ?string $storageFilesModelClass = null;
+
     /**
      * @throws InvalidConfigException
      */
@@ -107,6 +109,10 @@ class StorageUploadBehavior extends Behavior
             $this->s3Storage = Yii::$app->get('s3storage');
         } else {
             throw new InvalidConfigException('You must configure "s3storage" component first.');
+        }
+
+        if($this->storageFilesModelClass){
+            $this->s3Storage->storageFilesModelClass = $this->storageFilesModelClass;
         }
 
         if (!array_key_exists($this->accessFile, S3Storage::itemAlias('S3Acl'))) {

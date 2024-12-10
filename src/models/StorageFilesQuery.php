@@ -39,9 +39,9 @@ class StorageFilesQuery extends \yii\db\ActiveQuery
     {
         return $this->andOnCondition([
             'OR',
-            ['IS NOT', "JSON_SEARCH(" . StorageFileShared::tableName() . ".`shared_with`, 'one', '*')", null],
-            ['IS NOT', "JSON_SEARCH(" . StorageFileShared::tableName() . ".`shared_with`, 'one', '" . Yii::$app->client->id . "')", null],
-            [StorageFileShared::tableName() . '.slave_id' => Yii::$app->client->id],
+            ['IS NOT', "JSON_SEARCH(" . StorageFiles::tableName() . ".`shared_with`, 'one', '*')", null],
+            ['IS NOT', "JSON_SEARCH(" . StorageFiles::tableName() . ".`shared_with`, 'one', '" . Yii::$app->client->id . "')", null],
+            [StorageFiles::tableName() . '.slave_id' => Yii::$app->client->id],
         ]);
     }
 
